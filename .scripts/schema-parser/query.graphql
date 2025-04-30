@@ -1,0 +1,9 @@
+query GetBooks {
+  books(limit: 10) {
+    id
+    title
+    author {
+      name
+    }
+  }
+}

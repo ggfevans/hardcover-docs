@@ -1,10 +1,47 @@
+import argparse
 import json
 import os
+import requests
+from dotenv import load_dotenv
 from pathlib import Path
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Configuration
 INPUT_FILE = "hardcover-schema-dump.json"  # Now using the direct JSON file
 OUTPUT_DIR = "../src/content/docs/api/GraphQL/Schemas"
+DEFAULT_ENDPOINT = "https://api.hardcover.app/v1/graphql"
+
+def load_config():
+    """Load configuration from environment variables or defaults."""
+    token = os.getenv("BEARER_TOKEN")
+    endpoint = os.getenv("GRAPHQL_ENDPOINT", DEFAULT_ENDPOINT)
+    return token, endpoint
+
+def execute_query(endpoint, token, query, variables=None):
+    """Send a GraphQL query or mutation to the endpoint."""
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "query": query,
+        "variables": variables or {}
+    }
+    response = requests.post(endpoint, headers=headers, json=payload)
+    return response
+
+def handle_response(response):
+    """Process and display the GraphQL response."""
+    if response.status_code == 200:
+        data = response.json()
+        if "errors" in data:
+            print("GraphQL Errors:", json.dumps(data["errors"], indent=2))
+        else:
+            print("GraphQL Response:", json.dumps(data["data"], indent=2))
+    else:
+        print(f"HTTP Error {response.status_code}: {response.text}")
 
 def parse_type_info(type_obj):
     """Convert GraphQL type object to a readable string"""
@@ -101,6 +138,37 @@ description: {description.replace('"', '\\"').replace('\n', ' ')}
     return content
 
 def main():
+    # Parse command-line arguments
+    parser = argparse.ArgumentParser(description="GraphQL Query Executor")
+    parser.add_argument("--query", required=True, help="Path to the GraphQL query file")
+    parser.add_argument("--variables", help="Path to the JSON file with variables")
+    parser.add_argument("--token", help="Bearer token for authorization")
+    parser.add_argument("--endpoint", help="GraphQL endpoint URL")
+    args = parser.parse_args()
+
+    # Load configuration
+    token, endpoint = load_config()
+    token = args.token or token
+    endpoint = args.endpoint or endpoint
+
+    if not token:
+        print("Error: Bearer token is required. Pass it via --token or set BEARER_TOKEN in .env.")
+        return
+
+    # Load the query
+    with open(args.query, "r") as f:
+        query = f.read()
+
+    # Load variables if provided
+    variables = {}
+    if args.variables:
+        with open(args.variables, "r") as f:
+            variables = json.load(f)
+
+    # Execute the query
+    response = execute_query(endpoint, token, query, variables)
+    handle_response(response)
+
     # Load the JSON directly - no need to extract it from Groovy
     try:
         with open(INPUT_FILE, 'r', encoding='utf-8') as file:
